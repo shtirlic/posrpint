@@ -2,11 +2,11 @@ package printer
 
 import (
 	"bytes"
-	"fmt"
-	"github.com/google/gousb"
 	"image"
 	"image/color"
 	"log"
+
+	"github.com/google/gousb"
 )
 
 const (
@@ -33,8 +33,8 @@ type Printer struct {
 	vid            int
 	pid            int
 	outEndpointNum int
-	//*gousb.Interface
-	//*gousb.OutEndpoint
+	// *gousb.Interface
+	// *gousb.OutEndpoint
 }
 
 func NewUsbPrinter(ctx *gousb.Context, vid int, pid int, outEndpointNum int) (prt *Printer, ctxOut *gousb.Context, err error) {
@@ -55,15 +55,15 @@ func NewUsbPrinter(ctx *gousb.Context, vid int, pid int, outEndpointNum int) (pr
 }
 
 func (p *Printer) Write(data []byte) (*Printer, error) {
-	intf, done, err := p.DefaultInterface()
+	iface, done, err := p.DefaultInterface()
 	if err != nil {
 		log.Fatalf("%s.DefaultInterface(): %v", p, err)
 	}
 	defer done()
 
-	ep, err := intf.OutEndpoint(0x01)
+	ep, err := iface.OutEndpoint(0x01)
 	if err != nil {
-		log.Printf("%s.OutEndpoint(0x01): %v", intf, err)
+		log.Printf("%s.OutEndpoint(0x01): %v", iface, err)
 		return p, err
 	}
 
@@ -73,7 +73,7 @@ func (p *Printer) Write(data []byte) (*Printer, error) {
 		log.Printf("%s.Write([%d]): only %d bytes written, returned error is %v", ep, len(data), numBytes, err)
 		return p, err
 	}
-	fmt.Printf("%d bytes of data: %v successfully sent.\r\n", len(data), data)
+	// fmt.Printf("%d bytes of data: %v successfully sent.\r\n", len(data), data)
 
 	return p, err
 }
@@ -82,14 +82,22 @@ func (p *Printer) FeedLines(count int) {
 	buff := bytes.NewBuffer(CmdFeed)
 	buff.WriteByte(0x1)
 	for count > 0 {
-		p.Write(buff.Bytes())
-		//time.Sleep(time.Second*1)
+		_, err := p.Write(buff.Bytes())
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		// time.Sleep(time.Second*1)
 		count -= 1
 	}
 }
 
 func (p *Printer) CutPaper() {
-	p.Write(CmdCut)
+	_, err := p.Write(CmdCut)
+	if err != nil {
+		log.Println(err)
+		return
+	}
 }
 
 func (p *Printer) PrintImage(imgSource image.Image) {
@@ -122,19 +130,19 @@ func (p *Printer) PrintImage(imgSource image.Image) {
 			}
 		}
 	}
-	fmt.Println(data)
+	// fmt.Println(data)
 	p.Raster(imageWidth, sz.Y, bytesWidth, data)
 }
 
 func intLowHigh(inpNumber int, outBytes int) (outp []byte) {
 
-	maxInput := (256 << (uint((outBytes * 8)) - 1))
+	maxInput := 256 << (uint(outBytes*8) - 1)
 
 	if outBytes < 1 || outBytes > 4 {
 		log.Println("Can only output 1-4 bytes")
 	}
 	if inpNumber < 0 || inpNumber > maxInput {
-		log.Println("Number too large. Can only output up to " + string(maxInput) + " in" + string(outBytes) + "byes")
+		log.Printf("Number too large. Can only output up to %d in %d bytes ", maxInput, outBytes)
 	}
 	for i := 0; i < outBytes; i++ {
 		inpNumberByte := byte(inpNumber % 256)
@@ -155,7 +163,11 @@ func (p *Printer) Raster(width, height, lineWidth int, imgBw []byte) {
 
 	fullImage := append(header, imgBw...)
 
-	p.Write(fullImage)
+	_, err := p.Write(fullImage)
+	if err != nil {
+		log.Println(err)
+		return
+	}
 }
 
 func invertImage(img image.Image) (inverted *image.Gray) {
@@ -165,7 +177,7 @@ func invertImage(img image.Image) (inverted *image.Gray) {
 		for x := bounds.Min.X; x < bounds.Max.X; x++ {
 			r, _, _, _ := img.At(x, y).RGBA()
 			r = 255 - r>>8
-			inverted.SetGray(x, y, color.Gray{uint8(r)})
+			inverted.SetGray(x, y, color.Gray{Y: uint8(r)})
 		}
 	}
 	return
